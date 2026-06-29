@@ -12,18 +12,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 不再用 SSH 隧道 + proxychains：那层扛不住 70 并发会卡死。
-      # 改为 SSH 进 SG VPS，让爬虫在 SG 上原生直连甘肃银行运行
-      # （SG 可直连、千兆、原生并发），跑完直接在 SG 上 git push 回仓库。
-      # ssh-action 会把远端 stdout 实时回传到本 Actions 日志，进度/ETA 照常可见。
+      # 不用 SSH 隧道（那层扛不住 70 并发会卡死）。
+      # GitHub Actions SSH 进 SG VPS，让爬虫在 SG 上原生直连甘肃银行运行
+      # （千兆、原生并发），跑完用 PAT 经 HTTPS push 回仓库。
+      # ssh-action 把远端 stdout 实时回传到本 Actions 日志，进度/ETA 照常可见。
       - name: Run scraper natively on SG VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           host: ${{ secrets.CN_SERVER_HOST }}
           username: ${{ secrets.CN_SERVER_USER }}
           key: ${{ secrets.CN_SERVER_SSH_KEY }}
           port: ${{ secrets.CN_SERVER_PORT }}
           command_timeout: 120m
+          envs: GH_TOKEN
           script: |
             set -e
             export PATH="$PATH:/usr/local/bin:/usr/bin"
@@ -36,15 +39,9 @@ jobs:
             command -v pnpm >/dev/null 2>&1 || npm i -g pnpm
             command -v nr   >/dev/null 2>&1 || npm i -g @antfu/ni
 
-            # 2. 克隆 / 同步仓库到 origin/main 干净状态
-            #    （git push 走 SG 上配置的 deploy key，remote 用 SSH）
-            #    先确保 GitHub 主机指纹在 known_hosts，否则非交互 clone 会
-            #    "Host key verification failed"。
-            mkdir -p ~/.ssh && chmod 700 ~/.ssh
-            ssh-keygen -F github.com >/dev/null 2>&1 \
-              || ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
+            # 2. 克隆（公开仓库走 HTTPS，无需凭证）/ 同步到 origin/main 干净状态
             if [ ! -d ~/CNAPS/.git ]; then
-              git clone git@github.com:normalman743/CNAPS.git ~/CNAPS
+              git clone https://github.com/normalman743/CNAPS.git ~/CNAPS
             fi
             cd ~/CNAPS
             git fetch origin
@@ -55,13 +52,13 @@ jobs:
             cd packages/core
             nr start
 
-            # 4. 有变化就提交并推回（floor 守卫触发时 nr start 已非 0 退出，
-            #    set -e 会在此之前中止，不会推上残缺数据）
+            # 4. 有变化就提交并推回（push 用 PAT，token 只在命令行内联、不落盘 .git/config）。
+            #    floor 守卫触发时 nr start 已非 0 退出，set -e 会在此之前中止，不推残缺数据。
             cd ~/CNAPS
             git config user.name  "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add packages/core/assets/
             git diff --cached --quiet || {
               git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
-              git push origin main
+              git push "https://x-access-token:${GH_TOKEN}@github.com/normalman743/CNAPS.git" HEAD:main
             }
