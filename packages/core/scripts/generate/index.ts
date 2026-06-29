@@ -1,7 +1,8 @@
 import type { CnapsResult, FailedTask, GansuDetailCnaps } from './api/cnaps'
+import process from 'node:process'
 import fse from 'fs-extra'
 import { getCnapsList, retryTasks } from './api/cnaps'
-import { RETRY_WINDOW_MS } from './constants'
+import { DATA_FLOOR_RATIO, RETRY_WINDOW_MS } from './constants'
 import logger from './logger'
 
 const CNAPS_JSON = 'assets/cnaps.json'
@@ -20,6 +21,8 @@ interface Status {
   errorCount: number
   /** 本次仍失败的组合详情（含完整 bank/city，供下次增量重试）。 */
   errors: FailedTask[]
+  /** 全量结果触发下限保护被中止时为 true（此时 cnaps.json/csv 未被覆盖）。 */
+  aborted?: boolean
 }
 
 async function readStatus(): Promise<Status | null> {
@@ -28,6 +31,17 @@ async function readStatus(): Promise<Status | null> {
   }
   catch {
     return null
+  }
+}
+
+/** 读取现有 cnaps.json 的条数；文件不存在或损坏时返回 0。 */
+async function countExisting(): Promise<number> {
+  try {
+    const existing = await fse.readJSON(CNAPS_JSON) as GansuDetailCnaps[]
+    return existing.length
+  }
+  catch {
+    return 0
   }
 }
 
@@ -65,6 +79,7 @@ async function writeOutputs(list: GansuDetailCnaps[], status: Status): Promise<v
 }
 
 (async function iife() {
+  const startedAt = Date.now()
   const prev = await readStatus()
   const withinWindow
     = prev !== null
@@ -88,6 +103,29 @@ async function writeOutputs(list: GansuDetailCnaps[], status: Status): Promise<v
     logger.info('full mode')
     result = await getCnapsList()
     list = result.list
+
+    // 下限保护：全量结果异常（如隧道中断致大量失败）时，拒绝覆盖现有好数据。
+    // 基线取现有 cnaps.json 实际条数；首次运行（无现有数据）则仅拦截空结果。
+    const existingCount = await countExisting()
+    const floor = Math.max(Math.floor(existingCount * DATA_FLOOR_RATIO), 1)
+    if (list.length < floor) {
+      logger.error(
+        `full crawl produced ${list.length} records, below floor ${floor} `
+        + `(existing ${existingCount}, ratio ${DATA_FLOOR_RATIO}); `
+        + `refusing to overwrite cnaps.json/csv`,
+      )
+      // 记一份带 aborted 标记的状态用于排查，但不动 cnaps.json/csv。
+      await fse.writeJSON(STATUS_JSON, {
+        lastUpdate: new Date().toISOString(),
+        mode: 'full',
+        total: list.length,
+        errorCount: result.errors.length,
+        errors: result.errors,
+        aborted: true,
+      }, { spaces: 2 })
+      process.exitCode = 1
+      return
+    }
   }
 
   await writeOutputs(list, {
@@ -97,4 +135,6 @@ async function writeOutputs(list: GansuDetailCnaps[], status: Status): Promise<v
     errorCount: result.errors.length,
     errors: result.errors,
   })
+
+  logger.info(`total elapsed: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`)
 })()

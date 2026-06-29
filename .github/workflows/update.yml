@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: '0 0 * * *'
+    # 北京时间 04:00（UTC 20:00），避开白天高峰
+    - cron: '0 20 * * *'
+
+permissions:
+  contents: write
 
 jobs:
   update:
@@ -33,9 +37,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y proxychains4
-          # 生成配置：所有流量走本地 1080 的 socks5，DNS 也走隧道
+          # 生成配置：所有流量走本地 1080 的 socks5，DNS 也走隧道。
+          # quiet_mode 关闭每个连接一行的 "Strict chain ... OK" 噪声日志。
           cat > /tmp/proxychains.conf <<'EOF'
           strict_chain
+          quiet_mode
           proxy_dns
           remote_dns_subnet 224
           tcp_read_time_out 15000
@@ -44,10 +50,18 @@ jobs:
           socks5 127.0.0.1 1080
           EOF
 
-      - name: Verify tunnel reaches CN (exit IP should be CN server)
+      - name: Verify tunnel actually relays traffic
         run: |
-          proxychains4 -f /tmp/proxychains.conf curl -s https://ifconfig.me || true
-          echo ""
+          # 对比直连出口 IP 与经隧道出口 IP：必须不同且隧道 IP 非空，
+          # 否则说明隧道未生效（流量直连），直接让整个 job 失败、不进行爬取。
+          RUNNER_IP=$(curl -s https://ifconfig.me || true)
+          TUNNEL_IP=$(proxychains4 -f /tmp/proxychains.conf curl -s https://ifconfig.me || true)
+          echo "runner egress IP : $RUNNER_IP"
+          echo "tunnel egress IP : $TUNNEL_IP"
+          if [ -z "$TUNNEL_IP" ] || [ "$TUNNEL_IP" = "$RUNNER_IP" ]; then
+            echo "::error::SOCKS5 tunnel not working (egress IP empty or unchanged); aborting"
+            exit 1
+          fi
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -71,3 +85,7 @@ jobs:
           git add packages/core/assets/
           git diff --cached --quiet || git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
           git push
+
+      - name: Tear down SSH tunnel
+        if: always()
+        run: pkill -f 'ssh .* -D 1080' || true

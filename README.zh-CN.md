@@ -67,7 +67,7 @@ curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core
 
 ## 更新频率
 
-每天北京时间 **08:00**（UTC 00:00）通过 GitHub Actions 自动运行，也支持手动触发。
+每天北京时间 **04:00**（UTC 20:00）通过 GitHub Actions 自动运行，也支持手动触发。
 
 由于甘肃银行接口封禁境外 IP，GitHub 官方 Runner 通过 SSH 动态转发（SOCKS5）经国内服务器中转访问接口，服务器仅做网络转发、不参与计算。
 
@@ -90,6 +90,9 @@ curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core
 | 2026-06-29 | 更新 README：添加数据统计、字段说明、直接下载链接、维护周期、Changelog |
 | 2026-06-29 | 错误记录：`queryAccBank` 不再吞掉网络错误，新增 `assets/status.json` 记录每次爬取时间、模式与失败组合 |
 | 2026-06-29 | 增量重试：距上次更新小于 2 小时（`RETRY_WINDOW_MS`）且上次有失败组合时，只重跑失败部分并按 `BankCode` 合并，避免重复全量爬取 |
+| 2026-06-29 | 数据下限保护（`DATA_FLOOR_RATIO`，90%）：全量结果若跌破现有条数的 90%，拒绝覆盖 `cnaps.json/csv` 并以非 0 退出，防止隧道中断等异常运行清空好数据 |
+| 2026-06-29 | 工作流加固：加 `permissions: contents: write`；verify 步骤断言隧道出口 IP 与 Runner 不同（否则 job 失败）；proxychains `quiet_mode` 静默逐请求日志；新增 SSH 隧道清理步骤 |
+| 2026-06-29 | 定时改为北京时间 04:00（UTC 20:00） |
 
 ## 数据文件
 

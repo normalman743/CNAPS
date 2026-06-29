@@ -63,7 +63,7 @@ Records each run's completion time `lastUpdate`, run `mode` (`full` / `increment
 
 ## Update Schedule
 
-Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions, and can also be triggered manually.
+Runs automatically every day at **UTC 20:00 (Beijing 04:00)** via GitHub Actions, and can also be triggered manually.
 
 Because the Bank of Gansu API blocks non-mainland IPs, the GitHub-hosted runner reaches the API through an SSH dynamic forward (SOCKS5) relayed via a CN server. The server only forwards traffic — it does not run Node or perform any computation.
 
@@ -84,6 +84,9 @@ Changes in this fork compared to the upstream [gweesin/CNAPS](https://github.com
 | 2026-06-29 | Updated README: added dataset stats, field descriptions, direct download links, maintenance period, changelog |
 | 2026-06-29 | Error tracking: `queryAccBank` no longer swallows network errors; added `assets/status.json` recording each run's time, mode, and failed combinations |
 | 2026-06-29 | Incremental retry: when the last update was under 2 hours ago (`RETRY_WINDOW_MS`) and had failures, only the failed combinations are re-run and merged by `BankCode`, avoiding a full re-crawl |
+| 2026-06-29 | Data floor guard (`DATA_FLOOR_RATIO`, 90%): a full crawl whose result collapses below 90% of existing records refuses to overwrite `cnaps.json/csv` and exits non-zero, so a broken run (e.g. dead tunnel) can't wipe good data |
+| 2026-06-29 | Workflow hardening: `permissions: contents: write`; verify step now asserts the tunnel egress IP differs from the runner (fails the job otherwise); proxychains `quiet_mode` to silence per-request logs; tear-down step for the SSH tunnel |
+| 2026-06-29 | Schedule moved to Beijing 04:00 (UTC 20:00) |
 
 ## Dataset Files
 
