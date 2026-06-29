@@ -59,15 +59,27 @@ Or open directly in browser:
 
 ## Update Schedule | 更新频率
 
-Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions, and can also be triggered manually.
+Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions Self-hosted Runner (CN server), and can also be triggered manually.
 
-每天北京时间 **08:00** 通过 GitHub Actions 自动运行，也支持手动触发。
+每天北京时间 **08:00** 通过部署在国内服务器的 GitHub Actions Self-hosted Runner 自动运行，也支持手动触发。
 
 ## Motivation | 背景
 
 Online resources for querying CNAPS codes often require login, paid access, or have CAPTCHA restrictions. This project provides a clean, open dataset without any such restrictions.
 
 现有联行号查询网站普遍存在付费墙、登录限制或验证码问题。本项目通过爬取甘肃银行公开查询接口，提供免费、干净的全量数据集。
+
+## Changelog | 本 Fork 改动记录
+
+相较于原项目 [gweesin/CNAPS](https://github.com/gweesin/CNAPS)，本 fork 做了以下改动：
+
+| 日期 | 改动 |
+|------|------|
+| 2026-06-29 | Fork 并重新激活，原项目自 2026-04-19 起停止更新 |
+| 2026-06-29 | 修复 `update.yml`：补充 `working-directory: packages/core`，解决 monorepo 下找不到 `start` 脚本的问题 |
+| 2026-06-29 | 修复 `update.yml`：将数据提交方式从创建 PR 改为直接 push，并带日期 commit message |
+| 2026-06-29 | 切换为国内 Self-hosted Runner，解决 GitHub 官方 Runner 境外 IP 无法访问甘肃银行接口的问题 |
+| 2026-06-29 | 更新 README：添加数据统计、字段说明、直接下载链接、维护周期、Changelog |
 
 ## Dataset Files | 数据文件
 
