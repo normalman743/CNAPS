@@ -35,17 +35,19 @@ jobs:
 
       - name: Start
         run: nr start
+        working-directory: packages/core
 
       - name: Check for Changes
         id: check_changes
         run: |
-          git diff --name-only HEAD^ HEAD > changed_files.txt || true
-          echo "::set-output name=changed_files::$(cat changed_files.txt)"
+          git diff --name-only HEAD > changed_files.txt || true
+          echo "changed_files=$(cat changed_files.txt)" >> $GITHUB_OUTPUT
 
-      - name: Create PR if Changes Detected
-        if: steps.check_changes.outputs.changed_files == 'assets/cities'
-        uses: peter-evans/create-pull-request@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'feat: Update cities data'
-          branch: main
+      - name: Commit and Push if Changes Detected
+        if: steps.check_changes.outputs.changed_files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/core/assets/
+          git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
+          git push
