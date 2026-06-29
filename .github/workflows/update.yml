@@ -25,7 +25,7 @@ jobs:
           username: ${{ secrets.CN_SERVER_USER }}
           key: ${{ secrets.CN_SERVER_SSH_KEY }}
           port: ${{ secrets.CN_SERVER_PORT }}
-          command_timeout: 120m
+          command_timeout: 240m
           envs: GH_TOKEN
           script: |
             set -e
