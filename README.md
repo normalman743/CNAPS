@@ -6,49 +6,47 @@
 
 **A tool for crawling and maintaining China's CNAPS (China National Advanced Payment System) codes dataset.**
 
-> ⚠️ **维护周期 Maintenance Period：2026-06-29 ～ 2026-07-29**（Self-hosted Runner on CN server）
+> ⚠️ **Maintenance Period: 2026-06-29 ～ 2026-07-29** (routed through a CN relay server)
 >
 > This is a maintained fork of [gweesin/CNAPS](https://github.com/gweesin/CNAPS). The original repository is no longer actively updated. This fork keeps the dataset current via daily GitHub Actions runs.
 
-## Introduction | 简介
+## Introduction
 
 CNAPS (China National Advanced Payment System) is China's large-value payment system that handles interbank transfers. This project provides a crawler tool to obtain the latest CNAPS codes for Chinese financial institutions, along with a regularly updated dataset.
 
-CNAPS（中国现代化支付系统）是中国大额支付系统，处理跨行转账业务。本项目提供爬虫工具，从甘肃银行网银接口自动采集最新联行号数据，并每日定时更新。
+## Dataset Stats
 
-## Dataset Stats | 数据统计
+| Item | Value |
+|------|-------|
+| Total records | 152,868 branches |
+| Province coverage | 31 (all mainland provinces) |
+| Bank categories | 33 (incl. rural/city commercial banks, foreign banks) |
+| Source | Bank of Gansu online-banking API (PBoC data) |
+| Last counted | 2026-06-29 |
 
-| 项目 | 数值 |
-|------|------|
-| 总条数 | 152,868 条支行 |
-| 省份覆盖 | 31 个（大陆全部） |
-| 银行分类 | 33 类（含农商行、城商行、外资行） |
-| 数据来源 | 甘肃银行网银接口（人民银行数据） |
-| 最后统计 | 2026-06-29 |
+## Fields
 
-## Fields | 字段说明
+| Field | Description |
+|-------|-------------|
+| `LName` | Full branch name |
+| `BankCode` | 12-digit CNAPS code |
+| `BankName` | Head bank name |
+| `BankId` | Head bank code |
+| `CityCode` | City code |
+| `CityName` | City name |
+| `ProvinceName` | Province name |
+| `ProvinceCode` | Province code |
 
-| 字段 | 说明 |
-|------|------|
-| `LName` | 支行全称 |
-| `BankCode` | 12 位联行号 |
-| `BankName` | 所属银行总行名 |
-| `BankId` | 银行总行代码 |
-| `CityCode` | 城市代码 |
-| `CityName` | 城市名 |
-| `ProvinceName` | 省份名 |
-| `ProvinceCode` | 省份代码 |
+## Download
 
-## Download | 直接下载
+The latest data can be downloaded directly without cloning the whole repository:
 
-最新数据可通过以下链接直接下载，无需克隆整个仓库：
-
-**CSV：**
+**CSV:**
 ```bash
 curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.csv" -o cnaps.csv
 ```
 
-**JSON：**
+**JSON:**
 ```bash
 curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.json" -o cnaps.json
 ```
@@ -57,34 +55,41 @@ Or open directly in browser:
 - https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.csv
 - https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.json
 
-## Update Schedule | 更新频率
+**status.json (run status / failure report):**
+```bash
+curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/status.json" -o status.json
+```
+Records each run's completion time `lastUpdate`, run `mode` (`full` / `incremental` retry), total record count `total`, and the combinations that still failed this run `errors` (with full bank/city info, used for the next incremental retry).
 
-Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions Self-hosted Runner (CN server), and can also be triggered manually.
+## Update Schedule
 
-每天北京时间 **08:00** 通过部署在国内服务器的 GitHub Actions Self-hosted Runner 自动运行，也支持手动触发。
+Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions, and can also be triggered manually.
 
-## Motivation | 背景
+Because the Bank of Gansu API blocks non-mainland IPs, the GitHub-hosted runner reaches the API through an SSH dynamic forward (SOCKS5) relayed via a CN server. The server only forwards traffic — it does not run Node or perform any computation.
+
+## Motivation
 
 Online resources for querying CNAPS codes often require login, paid access, or have CAPTCHA restrictions. This project provides a clean, open dataset without any such restrictions.
 
-现有联行号查询网站普遍存在付费墙、登录限制或验证码问题。本项目通过爬取甘肃银行公开查询接口，提供免费、干净的全量数据集。
+## Changelog
 
-## Changelog | 本 Fork 改动记录
+Changes in this fork compared to the upstream [gweesin/CNAPS](https://github.com/gweesin/CNAPS):
 
-相较于原项目 [gweesin/CNAPS](https://github.com/gweesin/CNAPS)，本 fork 做了以下改动：
+| Date | Change |
+|------|--------|
+| 2026-06-29 | Forked and reactivated; upstream stopped updating on 2026-04-19 |
+| 2026-06-29 | Fixed `update.yml`: added `working-directory: packages/core` to resolve the missing `start` script under the monorepo |
+| 2026-06-29 | Fixed `update.yml`: changed data submission from opening a PR to a direct push with a dated commit message |
+| 2026-06-29 | Switched to SSH dynamic forwarding (SOCKS5) + proxychains so the GitHub-hosted runner reaches the Bank of Gansu API via a CN relay server (server only forwards, no Node, no computation) |
+| 2026-06-29 | Updated README: added dataset stats, field descriptions, direct download links, maintenance period, changelog |
+| 2026-06-29 | Error tracking: `queryAccBank` no longer swallows network errors; added `assets/status.json` recording each run's time, mode, and failed combinations |
+| 2026-06-29 | Incremental retry: when the last update was under 2 hours ago (`RETRY_WINDOW_MS`) and had failures, only the failed combinations are re-run and merged by `BankCode`, avoiding a full re-crawl |
 
-| 日期 | 改动 |
-|------|------|
-| 2026-06-29 | Fork 并重新激活，原项目自 2026-04-19 起停止更新 |
-| 2026-06-29 | 修复 `update.yml`：补充 `working-directory: packages/core`，解决 monorepo 下找不到 `start` 脚本的问题 |
-| 2026-06-29 | 修复 `update.yml`：将数据提交方式从创建 PR 改为直接 push，并带日期 commit message |
-| 2026-06-29 | 切换为国内 Self-hosted Runner，解决 GitHub 官方 Runner 境外 IP 无法访问甘肃银行接口的问题 |
-| 2026-06-29 | 更新 README：添加数据统计、字段说明、直接下载链接、维护周期、Changelog |
+## Dataset Files
 
-## Dataset Files | 数据文件
-
-- [assets/cnaps.json](packages/core/assets/cnaps.json) — JSON 格式，适合程序调用
-- [assets/cnaps.csv](packages/core/assets/cnaps.csv) — CSV 格式，适合直接查看或导入数据库
+- [assets/cnaps.json](packages/core/assets/cnaps.json) — JSON format, for programmatic use
+- [assets/cnaps.csv](packages/core/assets/cnaps.csv) — CSV format, for viewing or importing into a database
+- [assets/status.json](packages/core/assets/status.json) — run status and failure report for each crawl
 
 Also available on HuggingFace: https://huggingface.co/datasets/gweesin/CNAPS
 

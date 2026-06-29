@@ -26,21 +26,34 @@ export interface QueryAccBankParam {
   cityCode: string
 }
 
-async function queryAccBank(params: QueryAccBankParam): Promise<GansuCnaps[]> {
-  try {
-    const response: AxiosResponse<GansuResponseModel<GansuRSP<GansuCnaps[]>>>
-            = await http.post(`/per/trans/queryAccBank.do?t=${Date.now()}`, {
-              BankName: params.bankName,
-              CityCode: params.cityCode,
-              PayeeBankId: params.bankId,
-            })
+/** 一个待查询的 (bank, city) 组合。 */
+export interface Task {
+  bank: GansuBank
+  city: GansuDetailCity
+}
 
-    return response.data.RSP?.List || []
-  }
-  catch (e) {
-    logger.error(e)
-    return []
-  }
+/** 查询失败的组合及其错误信息。存完整 bank/city 以便后续增量重试。 */
+export interface FailedTask extends Task {
+  message: string
+}
+
+/** 爬取结果：成功数据 + 失败组合列表。 */
+export interface CnapsResult {
+  list: GansuDetailCnaps[]
+  errors: FailedTask[]
+}
+
+async function queryAccBank(params: QueryAccBankParam): Promise<GansuCnaps[]> {
+  // 注意：这里不再 catch 网络错误。axios-retry 重试 3 次后仍失败会抛出，
+  // 由上层 runTasks 捕获并记录为真实错误；空 List 才算"该组合本就无网点"。
+  const response: AxiosResponse<GansuResponseModel<GansuRSP<GansuCnaps[]>>>
+          = await http.post(`/per/trans/queryAccBank.do?t=${Date.now()}`, {
+            BankName: params.bankName,
+            CityCode: params.cityCode,
+            PayeeBankId: params.bankId,
+          })
+
+  return response.data.RSP?.List || []
 }
 
 async function queryReallyAccBank(
@@ -61,41 +74,70 @@ async function queryReallyAccBank(
   })
 }
 
-export async function getCnapsList(): Promise<GansuDetailCnaps[]> {
-  const banks = await getBanks()
-  const cities = await getCities(true)
+/**
+ * 并发执行一批 (bank, city) 查询任务，统一收集成功数据与失败组合。
+ * 全量爬取与增量重试都走这个函数。
+ */
+async function runTasks(tasks: Task[]): Promise<CnapsResult> {
+  const errors: FailedTask[] = []
 
   // eslint-disable-next-line ts/no-unsafe-function-type
-  const promiseFnList: Array<(callback: Function) => void> = []
-
-  const lastCity = cities[cities.length - 1]
-
-  logger.info('start query cnaps')
-  logger.info(`banks: ${banks.map(bank => bank.BankName)}`)
-  logger.info(`cities: ${cities.map(city => city.CityName)}`)
-  for (let idx = 0; idx < banks.length; ++idx) {
-    const bank = banks[idx]
-    for (const city of cities) {
-      promiseFnList.push((callback) => {
-        queryReallyAccBank(bank, city).then(value => callback(null, value)).catch((e) => {
-          logger.error(e)
+  const promiseFnList: Array<(callback: Function) => void> = tasks.map(
+    (task, idx) => (callback) => {
+      queryReallyAccBank(task.bank, task.city)
+        .then(value => callback(null, value))
+        .catch((e: unknown) => {
+          const message = e instanceof Error ? e.message : String(e)
+          logger.error(`bank=${task.bank.BankName} city=${task.city.CityName}: ${message}`)
+          errors.push({ ...task, message })
           callback(null, [])
-        }).finally(() => {
-          if (city === lastCity)
-            logger.info(`progress: ${idx + 1}/${banks.length}, bank: ${bank.BankName} done`)
         })
-      })
-    }
-  }
+        .finally(() => {
+          if ((idx + 1) % 500 === 0 || idx + 1 === tasks.length)
+            logger.info(`progress: ${idx + 1}/${tasks.length}`)
+        })
+    },
+  )
 
   const cnapsMatrix = await async.parallelLimit<
     GansuDetailCnaps[],
     GansuDetailCnaps[][]
   >(promiseFnList, MAX_CONCURRENCY)
 
-  logger.info('query cnaps done')
+  return {
+    list: cnapsMatrix
+      .flatMap(cnaps => cnaps)
+      .sort((a, b) => a.BankCode.localeCompare(b.BankCode)),
+    errors,
+  }
+}
 
-  return cnapsMatrix
-    .flatMap(cnaps => cnaps)
-    .sort((a, b) => a.BankCode.localeCompare(b.BankCode))
+/** 全量爬取：所有 bank × city 组合。 */
+export async function getCnapsList(): Promise<CnapsResult> {
+  const banks = await getBanks()
+  const cities = await getCities(true)
+
+  const tasks: Task[] = []
+  for (const bank of banks) {
+    for (const city of cities)
+      tasks.push({ bank, city })
+  }
+
+  logger.info('start query cnaps (full)')
+  logger.info(`banks: ${banks.map(bank => bank.BankName)}`)
+  logger.info(`cities: ${cities.map(city => city.CityName)}`)
+  logger.info(`total tasks: ${tasks.length}`)
+
+  const result = await runTasks(tasks)
+
+  logger.info('query cnaps done')
+  return result
+}
+
+/** 增量重试：只查询给定的失败组合。 */
+export async function retryTasks(tasks: Task[]): Promise<CnapsResult> {
+  logger.info(`start retry ${tasks.length} failed tasks (incremental)`)
+  const result = await runTasks(tasks.map(({ bank, city }) => ({ bank, city })))
+  logger.info('retry done')
+  return result
 }
