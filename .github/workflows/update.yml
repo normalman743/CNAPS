@@ -7,86 +7,56 @@ on:
     # 北京时间 04:00（UTC 20:00），避开白天高峰
     - cron: '0 20 * * *'
 
-permissions:
-  contents: write
-
 jobs:
   update:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup SSH SOCKS5 tunnel via CN server
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.CN_SERVER_SSH_KEY }}" > ~/.ssh/cn_key
-          chmod 600 ~/.ssh/cn_key
-          # 后台建立动态转发隧道：本地 1080 -> CN 服务器出口
-          ssh -i ~/.ssh/cn_key \
-              -p ${{ secrets.CN_SERVER_PORT }} \
-              -o StrictHostKeyChecking=no \
-              -o ExitOnForwardFailure=yes \
-              -o ServerAliveInterval=30 \
-              -D 1080 -N -f \
-              ${{ secrets.CN_SERVER_USER }}@${{ secrets.CN_SERVER_HOST }}
-          # 等隧道就绪
-          sleep 3
-
-      - name: Install proxychains-ng
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y proxychains4
-          # 生成配置：所有 TCP 连接走本地 1080 的 socks5。
-          # 不开 proxy_dns：proxychains-ng 的远程 DNS 解析会加全局锁、逐个串行，
-          # 70 并发会全部卡在 DNS 锁上把吞吐压到个位数/秒。域名本地解析即可
-          # （银行封的是连接来源 IP，不是 DNS），只需隧道转发 TCP。
-          # quiet_mode 关闭每个连接一行的 "Strict chain ... OK" 噪声日志。
-          cat > /tmp/proxychains.conf <<'EOF'
-          strict_chain
-          quiet_mode
-          tcp_read_time_out 15000
-          tcp_connect_time_out 8000
-          [ProxyList]
-          socks5 127.0.0.1 1080
-          EOF
-
-      - name: Verify tunnel actually relays traffic
-        run: |
-          # 对比直连出口 IP 与经隧道出口 IP：必须不同且隧道 IP 非空，
-          # 否则说明隧道未生效（流量直连），直接让整个 job 失败、不进行爬取。
-          RUNNER_IP=$(curl -s https://ifconfig.me || true)
-          TUNNEL_IP=$(proxychains4 -f /tmp/proxychains.conf curl -s https://ifconfig.me || true)
-          echo "runner egress IP : $RUNNER_IP"
-          echo "tunnel egress IP : $TUNNEL_IP"
-          if [ -z "$TUNNEL_IP" ] || [ "$TUNNEL_IP" = "$RUNNER_IP" ]; then
-            echo "::error::SOCKS5 tunnel not working (egress IP empty or unchanged); aborting"
-            exit 1
-          fi
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set node
-        uses: actions/setup-node@v4
+      # 不再用 SSH 隧道 + proxychains：那层扛不住 70 并发会卡死。
+      # 改为 SSH 进 SG VPS，让爬虫在 SG 上原生直连甘肃银行运行
+      # （SG 可直连、千兆、原生并发），跑完直接在 SG 上 git push 回仓库。
+      # ssh-action 会把远端 stdout 实时回传到本 Actions 日志，进度/ETA 照常可见。
+      - name: Run scraper natively on SG VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          node-version: lts/*
+          host: ${{ secrets.CN_SERVER_HOST }}
+          username: ${{ secrets.CN_SERVER_USER }}
+          key: ${{ secrets.CN_SERVER_SSH_KEY }}
+          port: ${{ secrets.CN_SERVER_PORT }}
+          command_timeout: 120m
+          script: |
+            set -e
+            export PATH="$PATH:/usr/local/bin:/usr/bin"
 
-      - name: Install dependencies
-        run: npm i -g @antfu/ni && nci
+            # 1. 确保 node / pnpm / ni 就绪（首次自动安装）
+            command -v node >/dev/null 2>&1 || {
+              curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+              apt-get install -y nodejs
+            }
+            command -v pnpm >/dev/null 2>&1 || npm i -g pnpm
+            command -v nr   >/dev/null 2>&1 || npm i -g @antfu/ni
 
-      - name: Run scraper through tunnel
-        run: proxychains4 -f /tmp/proxychains.conf nr start
-        working-directory: packages/core
+            # 2. 克隆 / 同步仓库到 origin/main 干净状态
+            #    （git push 走 SG 上配置的 deploy key，remote 用 SSH）
+            if [ ! -d ~/CNAPS/.git ]; then
+              git clone git@github.com:normalman743/CNAPS.git ~/CNAPS
+            fi
+            cd ~/CNAPS
+            git fetch origin
+            git reset --hard origin/main
 
-      - name: Commit and push if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/core/assets/
-          git diff --cached --quiet || git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
-          git push
+            # 3. 安装依赖并原生跑爬虫（直连甘肃，无隧道）
+            pnpm install --frozen-lockfile
+            cd packages/core
+            nr start
 
-      - name: Tear down SSH tunnel
-        if: always()
-        run: pkill -f 'ssh .* -D 1080' || true
+            # 4. 有变化就提交并推回（floor 守卫触发时 nr start 已非 0 退出，
+            #    set -e 会在此之前中止，不会推上残缺数据）
+            cd ~/CNAPS
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add packages/core/assets/
+            git diff --cached --quiet || {
+              git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
+              git push origin main
+            }
