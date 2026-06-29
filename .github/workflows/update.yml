@@ -8,46 +8,24 @@ on:
 
 jobs:
   update:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        node: [lts/*]
-        os: [ubuntu-latest]
-      fail-fast: false
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+      - name: Run scraper on CN server via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: ${{ matrix.node }}
-
-      - name: Setup
-        run: npm i -g @antfu/ni
-
-      - name: Install
-        run: nci
-
-      - name: Start
-        run: nr start
-        working-directory: packages/core
-
-      - name: Check for Changes
-        id: check_changes
-        run: |
-          git diff --name-only HEAD > changed_files.txt || true
-          echo "changed_files=$(cat changed_files.txt)" >> $GITHUB_OUTPUT
-
-      - name: Commit and Push if Changes Detected
-        if: steps.check_changes.outputs.changed_files != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/core/assets/
-          git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
-          git push
+          host: ${{ secrets.CN_SERVER_HOST }}
+          username: ${{ secrets.CN_SERVER_USER }}
+          key: ${{ secrets.CN_SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/CNAPS
+            git pull
+            cd packages/core
+            pnpm run start
+            cd ~/CNAPS
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add packages/core/assets/
+            git diff --cached --quiet || git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
+            git push
