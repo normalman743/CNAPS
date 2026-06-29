@@ -1,48 +1,64 @@
 # CNAPS
 
-[![npm version][npm-version-src]][npm-version-href]
-[![npm downloads][npm-downloads-src]][npm-downloads-href]
-[![bundle][bundle-src]][bundle-href]
-[![JSDocs][jsdocs-src]][jsdocs-href]
 [![License][license-src]][license-href]
 
 [English](./README.md) | [中文](./README.zh-CN.md)
 
 **A tool for crawling and maintaining China's CNAPS (China National Advanced Payment System) codes dataset.**
 
-## Introduction
+> This is a maintained fork of [gweesin/CNAPS](https://github.com/gweesin/CNAPS). The original repository is no longer actively updated. This fork keeps the dataset current via daily GitHub Actions runs.
+
+## Introduction | 简介
 
 CNAPS (China National Advanced Payment System) is China's large-value payment system that handles interbank transfers. This project provides a crawler tool to obtain the latest CNAPS codes for Chinese financial institutions, along with a regularly updated dataset.
 
-Financial applications often require valid bank identification codes for transaction processing. CNAPS codes change over time as banks merge, close, or new ones emerge. This project aims to provide an up-to-date, easily accessible dataset of CNAPS codes for developers working with Chinese financial systems.
+CNAPS（中国现代化支付系统）是中国大额支付系统，处理跨行转账业务。本项目提供爬虫工具，从甘肃银行网银接口自动采集最新联行号数据，并每日定时更新。
 
-## Motivation
+## Dataset Stats | 数据统计
 
-Online resources for querying CNAPS codes, such as [联行号查询](https://www.lianhanghao.com/), [联行号查询API接口](https://www.cwjyz.com.cn/bank/api_intro.html), and [浙商银行联行号查询](https://corbank.czbank.com/CORPORBANK/query_unionBank_index.jsp), often require following public accounts, logging in for paid access, or have frequent CAPTCHA restrictions, making them inconvenient to use.
+| 项目 | 数值 |
+|------|------|
+| 总条数 | 152,868 条支行 |
+| 省份覆盖 | 31 个（大陆全部） |
+| 银行分类 | 33 类（含农商行、城商行、外资行） |
+| 数据来源 | 甘肃银行网银接口（人民银行数据） |
+| 最后统计 | 2026-06-29 |
 
-Faced with these issues, this project was created to provide a solution without the need for login, CAPTCHA, or other restrictions. The data is synchronized daily to ensure timeliness.
+## Fields | 字段说明
 
-## Features
+| 字段 | 说明 |
+|------|------|
+| `LName` | 支行全称 |
+| `BankCode` | 12 位联行号 |
+| `BankName` | 所属银行总行名 |
+| `BankId` | 银行总行代码 |
+| `CityCode` | 城市代码 |
+| `CityName` | 城市名 |
+| `ProvinceName` | 省份名 |
+| `ProvinceCode` | 省份代码 |
 
-- Automated crawler for obtaining the latest CNAPS codes
-- Regularly updated dataset in both JSON and CSV formats
-- Comprehensive coverage of Chinese financial institutions
+## Update Schedule | 更新频率
 
-## Dataset
+Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions, and can also be triggered manually.
 
-The dataset is stored in two formats:
-- [assets/cnaps.json](packages/core/assets/cnaps.json) - JSON format for programmatic access
-- [assets/cnaps.csv](packages/core/assets/cnaps.csv) - CSV format for easy viewing and spreadsheet import
+每天北京时间 **08:00** 通过 GitHub Actions 自动运行，也支持手动触发。
 
-> **Note**:
-> CNAPS codes are 12-digit numbers used to uniquely identify banks and branches in China, similar to how SWIFT codes function internationally.
+## Motivation | 背景
 
-## Usage
+Online resources for querying CNAPS codes often require login, paid access, or have CAPTCHA restrictions. This project provides a clean, open dataset without any such restrictions.
 
-You can directly access the dataset files in this repository, or use the crawler tool to obtain the latest data.
+现有联行号查询网站普遍存在付费墙、登录限制或验证码问题。本项目通过爬取甘肃银行公开查询接口，提供免费、干净的全量数据集。
 
-or using from https://huggingface.co/datasets/gweesin/CNAPS
+## Dataset Files | 数据文件
+
+- [assets/cnaps.json](packages/core/assets/cnaps.json) — JSON 格式，适合程序调用
+- [assets/cnaps.csv](packages/core/assets/cnaps.csv) — CSV 格式，适合直接查看或导入数据库
+
+Also available on HuggingFace: https://huggingface.co/datasets/gweesin/CNAPS
 
 ## License
 
-[MIT](./LICENSE) License © 2023-PRESENT [Gweesin](https://github.com/gweesin)
+[MIT](./LICENSE) License © 2023-PRESENT [Gweesin](https://github.com/gweesin) / Fork maintained by [normalman743](https://github.com/normalman743)
+
+[license-src]: https://img.shields.io/github/license/normalman743/CNAPS.svg
+[license-href]: https://github.com/normalman743/CNAPS/blob/main/LICENSE
