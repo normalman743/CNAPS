@@ -11,26 +11,63 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run scraper on CN server via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH SOCKS5 tunnel via CN server
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CN_SERVER_SSH_KEY }}" > ~/.ssh/cn_key
+          chmod 600 ~/.ssh/cn_key
+          # 后台建立动态转发隧道：本地 1080 -> CN 服务器出口
+          ssh -i ~/.ssh/cn_key \
+              -p ${{ secrets.CN_SERVER_PORT }} \
+              -o StrictHostKeyChecking=no \
+              -o ExitOnForwardFailure=yes \
+              -o ServerAliveInterval=30 \
+              -D 1080 -N -f \
+              ${{ secrets.CN_SERVER_USER }}@${{ secrets.CN_SERVER_HOST }}
+          # 等隧道就绪
+          sleep 3
+
+      - name: Install proxychains-ng
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y proxychains4
+          # 生成配置：所有流量走本地 1080 的 socks5，DNS 也走隧道
+          cat > /tmp/proxychains.conf <<'EOF'
+          strict_chain
+          proxy_dns
+          remote_dns_subnet 224
+          tcp_read_time_out 15000
+          tcp_connect_time_out 8000
+          [ProxyList]
+          socks5 127.0.0.1 1080
+          EOF
+
+      - name: Verify tunnel reaches CN (exit IP should be CN server)
+        run: |
+          proxychains4 -f /tmp/proxychains.conf curl -s https://ifconfig.me || true
+          echo ""
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set node
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.CN_SERVER_HOST }}
-          username: ${{ secrets.CN_SERVER_USER }}
-          key: ${{ secrets.CN_SERVER_SSH_KEY }}
-          port: ${{ secrets.CN_SERVER_PORT }}
-          script: |
-            set -e
-            command -v node || (curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && apt install -y nodejs)
-            command -v pnpm || npm i -g pnpm
-            [ -d ~/CNAPS ] || git clone https://github.com/normalman743/CNAPS.git ~/CNAPS
-            cd ~/CNAPS
-            git pull
-            cd packages/core
-            pnpm install --frozen-lockfile
-            pnpm run start
-            cd ~/CNAPS
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add packages/core/assets/
-            git diff --cached --quiet || git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
-            git push
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm i -g @antfu/ni && nci
+
+      - name: Run scraper through tunnel
+        run: proxychains4 -f /tmp/proxychains.conf nr start
+        working-directory: packages/core
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/core/assets/
+          git diff --cached --quiet || git commit -m "chore: update CNAPS data $(date +'%Y-%m-%d')"
+          git push
