@@ -38,6 +38,11 @@ jobs:
 
             # 2. 克隆 / 同步仓库到 origin/main 干净状态
             #    （git push 走 SG 上配置的 deploy key，remote 用 SSH）
+            #    先确保 GitHub 主机指纹在 known_hosts，否则非交互 clone 会
+            #    "Host key verification failed"。
+            mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            ssh-keygen -F github.com >/dev/null 2>&1 \
+              || ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
             if [ ! -d ~/CNAPS/.git ]; then
               git clone git@github.com:normalman743/CNAPS.git ~/CNAPS
             fi
