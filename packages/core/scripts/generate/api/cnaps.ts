@@ -80,10 +80,13 @@ async function queryReallyAccBank(
  */
 async function runTasks(tasks: Task[]): Promise<CnapsResult> {
   const errors: FailedTask[] = []
+  const total = tasks.length
+  const startedAt = Date.now()
+  let completed = 0
 
   // eslint-disable-next-line ts/no-unsafe-function-type
   const promiseFnList: Array<(callback: Function) => void> = tasks.map(
-    (task, idx) => (callback) => {
+    task => (callback) => {
       queryReallyAccBank(task.bank, task.city)
         .then(value => callback(null, value))
         .catch((e: unknown) => {
@@ -93,8 +96,17 @@ async function runTasks(tasks: Task[]): Promise<CnapsResult> {
           callback(null, [])
         })
         .finally(() => {
-          if ((idx + 1) % 500 === 0 || idx + 1 === tasks.length)
-            logger.info(`progress: ${idx + 1}/${tasks.length}`)
+          completed += 1
+          if (completed % 500 === 0 || completed === total) {
+            const elapsed = (Date.now() - startedAt) / 1000
+            const rate = elapsed > 0 ? completed / elapsed : 0
+            const etaSeconds = rate > 0 ? (total - completed) / rate : 0
+            logger.info(
+              `progress: ${completed}/${total} (${(completed / total * 100).toFixed(1)}%), `
+              + `elapsed ${elapsed.toFixed(0)}s, rate ${rate.toFixed(1)}/s, `
+              + `ETA ${etaSeconds.toFixed(0)}s, errors ${errors.length}`,
+            )
+          }
         })
     },
   )

@@ -37,13 +37,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y proxychains4
-          # 生成配置：所有流量走本地 1080 的 socks5，DNS 也走隧道。
+          # 生成配置：所有 TCP 连接走本地 1080 的 socks5。
+          # 不开 proxy_dns：proxychains-ng 的远程 DNS 解析会加全局锁、逐个串行，
+          # 70 并发会全部卡在 DNS 锁上把吞吐压到个位数/秒。域名本地解析即可
+          # （银行封的是连接来源 IP，不是 DNS），只需隧道转发 TCP。
           # quiet_mode 关闭每个连接一行的 "Strict chain ... OK" 噪声日志。
           cat > /tmp/proxychains.conf <<'EOF'
           strict_chain
           quiet_mode
-          proxy_dns
-          remote_dns_subnet 224
           tcp_read_time_out 15000
           tcp_connect_time_out 8000
           [ProxyList]
