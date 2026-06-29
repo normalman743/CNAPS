@@ -37,6 +37,24 @@ CNAPS（中国现代化支付系统）是中国大额支付系统，处理跨行
 | `ProvinceName` | 省份名 |
 | `ProvinceCode` | 省份代码 |
 
+## Download | 直接下载
+
+最新数据可通过以下链接直接下载，无需克隆整个仓库：
+
+**CSV：**
+```bash
+curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.csv" -o cnaps.csv
+```
+
+**JSON：**
+```bash
+curl -L "https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.json" -o cnaps.json
+```
+
+Or open directly in browser:
+- https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.csv
+- https://raw.githubusercontent.com/normalman743/CNAPS/main/packages/core/assets/cnaps.json
+
 ## Update Schedule | 更新频率
 
 Runs automatically every day at **UTC 00:00 (Beijing 08:00)** via GitHub Actions, and can also be triggered manually.
