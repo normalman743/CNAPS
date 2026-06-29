@@ -17,11 +17,16 @@ jobs:
           host: ${{ secrets.CN_SERVER_HOST }}
           username: ${{ secrets.CN_SERVER_USER }}
           key: ${{ secrets.CN_SERVER_SSH_KEY }}
+          port: ${{ secrets.CN_SERVER_PORT }}
           script: |
             set -e
+            command -v node || (curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && apt install -y nodejs)
+            command -v pnpm || npm i -g pnpm
+            [ -d ~/CNAPS ] || git clone https://github.com/normalman743/CNAPS.git ~/CNAPS
             cd ~/CNAPS
             git pull
             cd packages/core
+            pnpm install --frozen-lockfile
             pnpm run start
             cd ~/CNAPS
             git config user.name "github-actions[bot]"
