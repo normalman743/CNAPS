@@ -6,6 +6,8 @@
 
 **A tool for crawling and maintaining China's CNAPS (China National Advanced Payment System) codes dataset.**
 
+> ⚠️ **维护周期 Maintenance Period：2026-06-29 ～ 2026-07-29**（Self-hosted Runner on CN server）
+>
 > This is a maintained fork of [gweesin/CNAPS](https://github.com/gweesin/CNAPS). The original repository is no longer actively updated. This fork keeps the dataset current via daily GitHub Actions runs.
 
 ## Introduction | 简介
